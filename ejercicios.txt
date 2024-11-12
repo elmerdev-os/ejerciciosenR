@@ -1,0 +1,373 @@
+install.packages("DBI")
+install.packages("RSQLite")
+
+library(DBI)
+library(RSQLite)
+
+# Conectar a la base de datos SQLite
+con <- dbConnect(RSQLite::SQLite(), "chinook.db")
+
+# Listar las tablas disponibles en la base de datos
+dbListTables(con)
+
+# Ejercicio 1: Listar todos los géneros y su cantidad de pistas
+query_1 <- "
+  SELECT g.Name AS Genero, COUNT(t.TrackId) AS Cantidad_Pistas
+  FROM genres g
+  LEFT JOIN tracks t ON g.GenreId = t.GenreId
+  GROUP BY g.Name
+  ORDER BY Cantidad_Pistas DESC;
+"
+
+resultado_1 <- dbGetQuery(con, query_1)
+print(resultado_1)
+
+# Ejercicio 2: Calcular el ingreso total por artista
+query_2 <- "
+  SELECT a.Name AS Artista, SUM(ii.Quantity * ii.UnitPrice) AS Ingreso_Total
+  FROM artists a
+  JOIN albums al ON a.ArtistId = al.ArtistId
+  JOIN tracks t ON al.AlbumId = t.AlbumId
+  JOIN invoice_items ii ON t.TrackId = ii.TrackId
+  JOIN invoices i ON ii.InvoiceId = i.InvoiceId
+  GROUP BY a.Name
+  ORDER BY Ingreso_Total DESC;
+"
+
+resultado_2 <- dbGetQuery(con, query_2)
+print(resultado_2)
+
+
+
+# Ejercicio 3: Encontrar los clientes que compraron más pistas
+query_3 <- "
+  SELECT c.FirstName || ' ' || c.LastName AS Cliente, COUNT(ii.TrackId) AS Pistas_Compradas
+  FROM customers c
+  JOIN invoices i ON c.CustomerId = i.CustomerId
+  JOIN invoice_items ii ON i.InvoiceId = ii.InvoiceId
+  GROUP BY c.CustomerId
+  ORDER BY Pistas_Compradas DESC;
+"
+
+resultado_3 <- dbGetQuery(con, query_3)
+print(resultado_3)
+
+# Ejercicio 4: Listar los 5 álbumes más vendidos
+query_4 <- "
+  SELECT al.Title AS Album, SUM(ii.Quantity) AS Ventas
+  FROM albums al
+  JOIN tracks t ON al.AlbumId = t.AlbumId
+  JOIN invoice_items ii ON t.TrackId = ii.TrackId
+  GROUP BY al.AlbumId
+  ORDER BY Ventas DESC
+  LIMIT 5;
+"
+
+resultado_4 <- dbGetQuery(con, query_4)
+print(resultado_4)
+
+
+
+
+# Ejercicio 5: Calcular el ingreso total por país
+query_5 <- "
+  SELECT c.Country AS Pais, SUM(ii.Quantity * ii.UnitPrice) AS Ingreso_Total
+  FROM customers c
+  JOIN invoices i ON c.CustomerId = i.CustomerId
+  JOIN invoice_items ii ON i.InvoiceId = ii.InvoiceId
+  GROUP BY c.Country
+  ORDER BY Ingreso_Total DESC;
+"
+
+resultado_5 <- dbGetQuery(con, query_5)
+print(resultado_5)
+
+
+# Ejercicio 6: Listar los 5 clientes con mayor gasto total
+query_6 <- "
+  SELECT c.FirstName || ' ' || c.LastName AS Cliente, SUM(ii.Quantity * ii.UnitPrice) AS Gasto_Total
+  FROM customers c
+  JOIN invoices i ON c.CustomerId = i.CustomerId
+  JOIN invoice_items ii ON i.InvoiceId = ii.InvoiceId
+  GROUP BY c.CustomerId
+  ORDER BY Gasto_Total DESC
+  LIMIT 5;
+"
+
+resultado_6 <- dbGetQuery(con, query_6)
+print(resultado_6)
+
+
+# Ejercicio 7: Mostrar el género musical más popular en términos de cantidad de canciones vendidas
+query_7 <- "
+  SELECT g.Name AS Genero, SUM(ii.Quantity) AS Canciones_Vendidas
+  FROM genres g
+  JOIN tracks t ON g.GenreId = t.GenreId
+  JOIN invoice_items ii ON t.TrackId = ii.TrackId
+  GROUP BY g.Name
+  ORDER BY Canciones_Vendidas DESC
+  LIMIT 1;
+"
+
+resultado_7 <- dbGetQuery(con, query_7)
+print(resultado_7)
+
+
+
+
+# Ejercicio 8: Deseo saber el artista con la mayor cantidad de álbumes
+query_8 <- "
+  SELECT a.Name AS Artista, COUNT(al.AlbumId) AS Cantidad_Albumes
+  FROM artists a
+  JOIN albums al ON a.ArtistId = al.ArtistId
+  GROUP BY a.Name
+  ORDER BY Cantidad_Albumes DESC
+  LIMIT 1;
+"
+
+resultado_8 <- dbGetQuery(con, query_8)
+print(resultado_8)
+
+
+
+# Ejercicio 9: Calcular el total de ventas por año
+query_9 <- "
+  SELECT strftime('%Y', i.InvoiceDate) AS Año, SUM(ii.Quantity * ii.UnitPrice) AS Ventas_Totales
+  FROM invoices i
+  JOIN invoice_items ii ON i.InvoiceId = ii.InvoiceId
+  GROUP BY Año
+  ORDER BY Año;
+"
+
+resultado_9 <- dbGetQuery(con, query_9)
+print(resultado_9)
+
+
+
+
+# Ejercicio 10: Deseo saber el empleado que ha atendido a más clientes 
+dbGetQuery(con, "
+    SELECT e.FirstName || ' ' || e.LastName AS empleado, COUNT(DISTINCT c.CustomerId) AS clientes_atendidos
+    FROM employees e
+    JOIN customers c ON e.EmployeeId = c.SupportRepId
+    GROUP BY empleado
+    ORDER BY clientes_atendidos DESC
+    LIMIT 1
+")
+
+
+# Ver las columnas de la tabla 'invoices'
+query_columns_invoices <- "PRAGMA table_info(invoices);"
+column_info <- dbGetQuery(con, query_columns_invoices)
+print(column_info)
+
+# Ver las columnas de la tabla 'employees'
+query_columns_employees <- "PRAGMA table_info(employees);"
+column_info_employees <- dbGetQuery(con, query_columns_employees)
+print(column_info_employees)
+
+# Ver las columnas de la tabla 'customers'
+query_columns_customers <- "PRAGMA table_info(customers);"
+column_info_customers <- dbGetQuery(con, query_columns_customers)
+print(column_info_customers)
+
+
+
+
+# Ejercicio 11: Mostrar las cinco canciones más vendidas en cada género
+query_11 <- "
+  WITH Canciones_Vendidas AS (
+    SELECT t.Name AS Cancion, g.Name AS Genero, SUM(ii.Quantity) AS Total_Ventas,
+           ROW_NUMBER() OVER (PARTITION BY g.GenreId ORDER BY SUM(ii.Quantity) DESC) AS Ranking
+    FROM tracks t
+    JOIN genres g ON t.GenreId = g.GenreId
+    JOIN invoice_items ii ON t.TrackId = ii.TrackId
+    GROUP BY t.TrackId, g.GenreId
+  )
+  SELECT Cancion, Genero, Total_Ventas
+  FROM Canciones_Vendidas
+  WHERE Ranking <= 5
+  ORDER BY Genero, Total_Ventas DESC;
+"
+
+resultado_11 <- dbGetQuery(con, query_11)
+print(resultado_11)
+
+
+
+# Ver las columnas de la tabla 'customers'
+query_columns_customers <- "PRAGMA table_info(customers);"
+column_info_customers <- dbGetQuery(con, query_columns_customers)
+print(column_info_customers)
+
+# Ejercicio 12: Calcular el ingreso mensual promedio por país
+query_12 <- "
+  SELECT c.Country, 
+         strftime('%Y-%m', i.InvoiceDate) AS Mes, 
+         AVG(i.Total) AS Ingreso_Promedio
+  FROM invoices i
+  JOIN customers c ON i.CustomerId = c.CustomerId  -- Relacionar facturas con clientes
+  GROUP BY c.Country, strftime('%Y-%m', i.InvoiceDate)  -- Agrupar por país y mes
+  ORDER BY Ingreso_Promedio DESC;
+"
+
+# Ejecutar la consulta
+resultado_12 <- dbGetQuery(con, query_12)
+print(resultado_12)
+
+
+
+# Ejercicio 13: Calcular la duración promedio de las canciones en los álbumes de cada artista
+query_13 <- "
+  SELECT a.Name AS Artista, 
+         al.Title AS Álbum, 
+         AVG(t.Milliseconds) / 1000 AS Duracion_Promedio_Segundos  -- Promedio de duración en segundos
+  FROM artists a
+  JOIN albums al ON a.ArtistId = al.ArtistId  -- Unir artistas con álbumes
+  JOIN tracks t ON al.AlbumId = t.AlbumId  -- Unir álbumes con pistas
+  GROUP BY a.ArtistId, al.AlbumId  -- Agrupar por artista y álbum
+  ORDER BY Duracion_Promedio_Segundos DESC;
+"
+
+# Ejecutar la consulta
+resultado_13 <- dbGetQuery(con, query_13)
+print(resultado_13)
+
+
+
+
+# Ejercicio 14: Calcular las ventas totales y número de canciones vendidas por cliente
+query_14 <- "
+  SELECT c.FirstName || ' ' || c.LastName AS Cliente,
+         SUM(ii.Quantity * ii.UnitPrice) AS Ventas_Totales,
+         COUNT(ii.TrackId) AS Canciones_Vendidas
+  FROM customers c
+  JOIN invoices i ON c.CustomerId = i.CustomerId
+  JOIN invoice_items ii ON i.InvoiceId = ii.InvoiceId
+  GROUP BY c.CustomerId
+  ORDER BY Ventas_Totales DESC;
+"
+
+resultado_14 <- dbGetQuery(con, query_14)
+print(resultado_14)
+
+
+
+
+
+
+# Ejercicio 15: Mostrar los clientes que han comprado canciones de más de 3 géneros diferentes
+query_15 <- "
+  SELECT c.FirstName || ' ' || c.LastName AS Cliente, COUNT(DISTINCT g.GenreId) AS Generos_Comprados
+  FROM customers c
+  JOIN invoices i ON c.CustomerId = i.CustomerId
+  JOIN invoice_items ii ON i.InvoiceId = ii.InvoiceId
+  JOIN tracks t ON ii.TrackId = t.TrackId
+  JOIN genres g ON t.GenreId = g.GenreId
+  GROUP BY c.CustomerId
+  HAVING Generos_Comprados > 3;
+"
+
+resultado_15 <- dbGetQuery(con, query_15)
+print(resultado_15)
+
+
+
+
+# Ejercicio 16: Calcular el promedio de compras por cliente según el país
+query_16 <- "
+  SELECT c.Country, 
+         AVG(i.Total) AS Promedio_Compras
+  FROM customers c
+  JOIN invoices i ON c.CustomerId = i.CustomerId  -- Relacionar clientes con facturas
+  GROUP BY c.Country  -- Agrupar por país
+  ORDER BY Promedio_Compras DESC;
+"
+
+# Ejecutar la consulta
+resultado_16 <- dbGetQuery(con, query_16)
+print(resultado_16)
+
+
+
+# Ejercicio 17: Calcular la cantidad de canciones en los géneros más vendidos
+query_17 <- "
+  SELECT g.Name AS Genero, COUNT(t.TrackId) AS Cantidad_Canciones
+  FROM genres g
+  JOIN tracks t ON g.GenreId = t.GenreId
+  JOIN invoice_items ii ON t.TrackId = ii.TrackId
+  GROUP BY g.GenreId
+  ORDER BY SUM(ii.Quantity) DESC;
+"
+
+resultado_17 <- dbGetQuery(con, query_17)
+print(resultado_17)
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Obtener las columnas de cada tabla
+query_columns_albums <- "PRAGMA table_info(albums);"
+column_info_albums <- dbGetQuery(con, query_columns_albums)
+print(column_info_albums)
+
+query_columns_artists <- "PRAGMA table_info(artists);"
+column_info_artists <- dbGetQuery(con, query_columns_artists)
+print(column_info_artists)
+
+query_columns_customers <- "PRAGMA table_info(customers);"
+column_info_customers <- dbGetQuery(con, query_columns_customers)
+print(column_info_customers)
+
+query_columns_employees <- "PRAGMA table_info(employees);"
+column_info_employees <- dbGetQuery(con, query_columns_employees)
+print(column_info_employees)
+
+query_columns_genres <- "PRAGMA table_info(genres);"
+column_info_genres <- dbGetQuery(con, query_columns_genres)
+print(column_info_genres)
+
+query_columns_invoice_items <- "PRAGMA table_info(invoice_items);"
+column_info_invoice_items <- dbGetQuery(con, query_columns_invoice_items)
+print(column_info_invoice_items)
+
+query_columns_invoices <- "PRAGMA table_info(invoices);"
+column_info_invoices <- dbGetQuery(con, query_columns_invoices)
+print(column_info_invoices)
+
+query_columns_media_types <- "PRAGMA table_info(media_types);"
+column_info_media_types <- dbGetQuery(con, query_columns_media_types)
+print(column_info_media_types)
+
+query_columns_playlist_track <- "PRAGMA table_info(playlist_track);"
+column_info_playlist_track <- dbGetQuery(con, query_columns_playlist_track)
+print(column_info_playlist_track)
+
+query_columns_playlists <- "PRAGMA table_info(playlists);"
+column_info_playlists <- dbGetQuery(con, query_columns_playlists)
+print(column_info_playlists)
+
+query_columns_sqlite_sequence <- "PRAGMA table_info(sqlite_sequence);"
+column_info_sqlite_sequence <- dbGetQuery(con, query_columns_sqlite_sequence)
+print(column_info_sqlite_sequence)
+
+query_columns_sqlite_stat1 <- "PRAGMA table_info(sqlite_stat1);"
+column_info_sqlite_stat1 <- dbGetQuery(con, query_columns_sqlite_stat1)
+print(column_info_sqlite_stat1)
+
+query_columns_tracks <- "PRAGMA table_info(tracks);"
+column_info_tracks <- dbGetQuery(con, query_columns_tracks)
+print(column_info_tracks)
+
+
+
+
